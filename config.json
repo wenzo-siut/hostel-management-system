@@ -1,0 +1,9 @@
+{
+    "db_type": "mysql",
+    "host": "localhost",
+    "port": 3306,
+    "user": "root",
+    "password": "Avalon4iik07",
+    "database": "hostel_management",
+    "sqlite_path": "hostel_sandbox.db"
+}
