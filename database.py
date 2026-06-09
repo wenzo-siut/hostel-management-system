@@ -97,10 +97,57 @@ class DatabaseManager:
         except Exception as e:
             raise DatabaseConnectionError(str(e))
 
-    def execute_query(self, query, params=None):
-        """Executes a non-selecting query (INSERT, UPDATE, DELETE)."""
+    def check_connection(self):
+        """Ensures the database connection is active and reconnects if needed."""
         if not self.conn:
             self.connect()
+            return
+
+        if self.db_type == "mysql":
+            try:
+                self.conn.ping(reconnect=True)
+            except Exception:
+                try:
+                    self.connect()
+                except Exception as e:
+                    raise DatabaseConnectionError(f"Failed to reconnect to MySQL: {e}")
+
+    def begin_transaction(self):
+        """Begins a database transaction."""
+        self.check_connection()
+        self.in_transaction = True
+        if self.db_type == "mysql":
+            self.conn.begin()
+        else:
+            self.conn.isolation_level = None
+            self.conn.execute("BEGIN TRANSACTION;")
+
+    def commit_transaction(self):
+        """Commits the current transaction."""
+        if self.conn:
+            if self.db_type == "sqlite":
+                self.conn.execute("COMMIT;")
+                self.conn.isolation_level = ""
+            else:
+                self.conn.commit()
+        self.in_transaction = False
+
+    def rollback_transaction(self):
+        """Rolls back the current transaction."""
+        if self.conn:
+            try:
+                if self.db_type == "sqlite":
+                    self.conn.execute("ROLLBACK;")
+                    self.conn.isolation_level = ""
+                else:
+                    self.conn.rollback()
+            except Exception:
+                pass
+        self.in_transaction = False
+
+    def execute_query(self, query, params=None):
+        """Executes a non-selecting query (INSERT, UPDATE, DELETE)."""
+        self.check_connection()
         
         # SQLite uses '?' placeholder instead of '%s'
         if self.db_type == "sqlite":
@@ -112,18 +159,22 @@ class DatabaseManager:
                     cursor.execute(query, params or ())
                     return cursor.lastrowid
             else:
-                with self.conn:
+                if getattr(self, "in_transaction", False):
                     cursor = self.conn.cursor()
                     cursor.execute(query, params or ())
                     return cursor.lastrowid
+                else:
+                    with self.conn:
+                        cursor = self.conn.cursor()
+                        cursor.execute(query, params or ())
+                        return cursor.lastrowid
         except Exception as e:
             print(f"Query Execution Error: {e}\nQuery: {query}")
             raise e
 
     def fetch_all(self, query, params=None):
         """Fetches all results for a SELECT query."""
-        if not self.conn:
-            self.connect()
+        self.check_connection()
 
         if self.db_type == "sqlite":
             query = query.replace("%s", "?")
@@ -144,8 +195,7 @@ class DatabaseManager:
 
     def fetch_one(self, query, params=None):
         """Fetches a single row result for a SELECT query."""
-        if not self.conn:
-            self.connect()
+        self.check_connection()
 
         if self.db_type == "sqlite":
             query = query.replace("%s", "?")
@@ -359,28 +409,92 @@ class DatabaseManager:
     def add_resident(self, room_id, student_id, full_name, academic_major, check_in_date, check_out_date,
                      deposit_paid, hostel_tuition_fee, academic_tuition_debt, allocation_status, probation_reason=None):
         """Registers a new student allocation and updates target room metrics."""
-        # Check current capacity
-        room = self.fetch_one("SELECT * FROM Rooms WHERE room_id = %s", (room_id,))
-        if not room:
-            raise ValueError("Target room does not exist.")
-        if room["current_occupancy"] >= room["total_capacity"]:
-            raise ValueError("Target room is at maximum occupancy.")
+        self.begin_transaction()
+        try:
+            # Check current capacity
+            room = self.fetch_one("SELECT * FROM Rooms WHERE room_id = %s", (room_id,))
+            if not room:
+                raise ValueError("Target room does not exist.")
+            if room["current_occupancy"] >= room["total_capacity"]:
+                raise ValueError("Target room is at maximum occupancy.")
 
-        # Create resident record
-        query = """
-            INSERT INTO Residents (
+            # Check if student ID already exists
+            existing = self.fetch_one("SELECT resident_id FROM Residents WHERE student_id = %s", (student_id,))
+            if existing:
+                raise ValueError(f"Student ID '{student_id}' is already registered.")
+
+            # Create resident record
+            query = """
+                INSERT INTO Residents (
+                    room_id, student_id, full_name, academic_major, check_in_date, check_out_date,
+                    deposit_paid, hostel_tuition_fee, academic_tuition_debt, allocation_status, probation_reason
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            """
+            resident_id = self.execute_query(query, (
                 room_id, student_id, full_name, academic_major, check_in_date, check_out_date,
-                deposit_paid, hostel_tuition_fee, academic_tuition_debt, allocation_status, probation_reason
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-        """
-        resident_id = self.execute_query(query, (
-            room_id, student_id, full_name, academic_major, check_in_date, check_out_date,
-            float(deposit_paid), float(hostel_tuition_fee), float(academic_tuition_debt), allocation_status, probation_reason
-        ))
+                float(deposit_paid), float(hostel_tuition_fee), float(academic_tuition_debt), allocation_status, probation_reason
+            ))
 
-        # Recalculate room occupancy and status
-        self.recalculate_room_state(room_id)
-        return resident_id
+            # Recalculate room occupancy and status
+            self.recalculate_room_state(room_id)
+            self.commit_transaction()
+            return resident_id
+        except Exception as e:
+            self.rollback_transaction()
+            raise e
+
+    def update_resident(self, resident_id, room_id, student_id, full_name, academic_major, check_in_date, check_out_date,
+                        deposit_paid, hostel_tuition_fee, academic_tuition_debt, allocation_status, probation_reason=None):
+        """Updates a resident's details, handling potential room transfers and occupancy adjustments."""
+        self.begin_transaction()
+        try:
+            # 1. Fetch current resident info to check old room
+            old_res = self.fetch_one("SELECT room_id, student_id FROM Residents WHERE resident_id = %s", (resident_id,))
+            if not old_res:
+                raise ValueError("Resident record does not exist.")
+            
+            old_room_id = old_res["room_id"]
+            room_changed = (old_room_id != room_id)
+
+            # Check if student ID is changing and if the new one is already in use by another student
+            if old_res["student_id"] != student_id:
+                existing = self.fetch_one("SELECT resident_id FROM Residents WHERE student_id = %s AND resident_id != %s", (student_id, resident_id))
+                if existing:
+                    raise ValueError(f"Student ID '{student_id}' is already registered to another resident.")
+
+            if room_changed:
+                # Check new room capacity
+                new_room = self.fetch_one("SELECT current_occupancy, total_capacity FROM Rooms WHERE room_id = %s", (room_id,))
+                if not new_room:
+                    raise ValueError("Target room does not exist.")
+                if new_room["current_occupancy"] >= new_room["total_capacity"]:
+                    raise ValueError("Target room is at maximum occupancy.")
+
+            # 2. Update Resident
+            query = """
+                UPDATE Residents SET
+                    room_id = %s, student_id = %s, full_name = %s, academic_major = %s,
+                    check_in_date = %s, check_out_date = %s, deposit_paid = %s,
+                    hostel_tuition_fee = %s, academic_tuition_debt = %s, allocation_status = %s,
+                    probation_reason = %s
+                WHERE resident_id = %s
+            """
+            self.execute_query(query, (
+                room_id, student_id, full_name, academic_major, check_in_date, check_out_date,
+                float(deposit_paid), float(hostel_tuition_fee), float(academic_tuition_debt),
+                allocation_status, probation_reason, resident_id
+            ))
+
+            # 3. Recalculate room occupancy
+            if room_changed:
+                self.recalculate_room_state(old_room_id)
+            self.recalculate_room_state(room_id)
+
+            self.commit_transaction()
+            return True
+        except Exception as e:
+            self.rollback_transaction()
+            raise e
 
     def search_residents(self, search_term=""):
         """Filters residents catalog using elastic string matches on ID, major, name, or room."""
@@ -407,18 +521,31 @@ class DatabaseManager:
 
     def delete_resident(self, resident_id):
         """Removes/Checks-out a resident and triggers room occupancy adjustment."""
-        resident = self.fetch_one("SELECT room_id FROM Residents WHERE resident_id = %s", (resident_id,))
-        if not resident:
-            return False
-        
-        room_id = resident["room_id"]
-        self.execute_query("DELETE FROM Residents WHERE resident_id = %s", (resident_id,))
-        self.recalculate_room_state(room_id)
-        return True
+        self.begin_transaction()
+        try:
+            resident = self.fetch_one("SELECT room_id FROM Residents WHERE resident_id = %s", (resident_id,))
+            if not resident:
+                self.rollback_transaction()
+                return False
+            
+            room_id = resident["room_id"]
+            self.execute_query("DELETE FROM Residents WHERE resident_id = %s", (resident_id,))
+            self.recalculate_room_state(room_id)
+            self.commit_transaction()
+            return True
+        except Exception as e:
+            self.rollback_transaction()
+            raise e
 
     def update_booking_time(self, resident_id, new_checkout_date):
         """Updates check-out date for the resident stay extension."""
-        self.execute_query("UPDATE Residents SET check_out_date = %s WHERE resident_id = %s", (new_checkout_date, resident_id))
+        self.begin_transaction()
+        try:
+            self.execute_query("UPDATE Residents SET check_out_date = %s WHERE resident_id = %s", (new_checkout_date, resident_id))
+            self.commit_transaction()
+        except Exception as e:
+            self.rollback_transaction()
+            raise e
 
     def recalculate_room_state(self, room_id):
         """Recalculates occupancy and status string for a target room."""

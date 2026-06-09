@@ -9,7 +9,8 @@ from gui.theme import (
     COLOR_BOOTSTRAP_PRIMARY_HOVER, COLOR_BOOTSTRAP_SUCCESS, COLOR_BOOTSTRAP_SUCCESS_HOVER,
     COLOR_BOOTSTRAP_WARNING, COLOR_BOOTSTRAP_WARNING_HOVER, COLOR_BOOTSTRAP_DANGER,
     COLOR_BOOTSTRAP_DANGER_HOVER, COLOR_BOOTSTRAP_TEXT_WHITE, FONT_FAMILY,
-    FONT_TITLE_SIZE, FONT_SUBTITLE_SIZE, FONT_BODY_SIZE, COLOR_BOOTSTRAP_SIDEBAR
+    FONT_TITLE_SIZE, FONT_SUBTITLE_SIZE, FONT_BODY_SIZE, COLOR_BOOTSTRAP_SIDEBAR,
+    COLOR_BOOTSTRAP_DANGER_BG, COLOR_BOOTSTRAP_DANGER_TEXT
 )
 
 class FloorEngineView(ctk.CTkFrame):
@@ -358,6 +359,20 @@ class FloorEngineView(ctk.CTkFrame):
         price_val = f"${float(room.get('semester_base_price', 0)):,.2f}"
         ctk.CTkLabel(spec_box, text=f"Semester Rate: {price_val}", font=(FONT_FAMILY, 10), text_color=COLOR_BOOTSTRAP_TEXT_MUTED).pack(anchor="w", padx=12, pady=(0, 12))
 
+        # Direct Onboarding Button if room has vacancy
+        if room["current_occupancy"] < room["total_capacity"]:
+            btn_onboard = ctk.CTkButton(
+                spec_box,
+                text="+ Onboard Student Here",
+                fg_color=COLOR_BOOTSTRAP_PRIMARY,
+                hover_color=COLOR_BOOTSTRAP_PRIMARY_HOVER,
+                text_color=COLOR_BOOTSTRAP_TEXT_WHITE,
+                font=(FONT_FAMILY, 10, "bold"),
+                command=lambda r=room: self.quick_onboard_student(r),
+                height=28
+            )
+            btn_onboard.pack(fill="x", padx=12, pady=(0, 12))
+
         # Load active occupants
         ctk.CTkLabel(
             self.detail_body, 
@@ -397,9 +412,15 @@ class FloorEngineView(ctk.CTkFrame):
                     lbl_dates = ctk.CTkLabel(res_card, text=f"Checked: {res['check_in_date']} to {res['check_out_date']}", font=(FONT_FAMILY, 10), text_color=date_fg)
                     lbl_dates.pack(anchor="w", pady=(3, 5), padx=12)
                     
+                    # Direct check-out and prolong buttons layout side-by-side
+                    btn_frame = ctk.CTkFrame(res_card, fg_color="transparent")
+                    btn_frame.pack(fill="x", padx=12, pady=(0, 10))
+                    btn_frame.columnconfigure(0, weight=1)
+                    btn_frame.columnconfigure(1, weight=1)
+
                     btn_prolong = ctk.CTkButton(
-                        res_card, 
-                        text="Prolong Booking Time", 
+                        btn_frame, 
+                        text="Prolong Stay", 
                         fg_color="transparent",
                         border_color=COLOR_BOOTSTRAP_BORDER,
                         border_width=1,
@@ -409,7 +430,21 @@ class FloorEngineView(ctk.CTkFrame):
                         command=lambda r_id=res["resident_id"], name=res["full_name"], check_out=res["check_out_date"]: self.show_prolong_dialog(r_id, name, check_out),
                         height=28
                     )
-                    btn_prolong.pack(fill="x", padx=12, pady=(0, 10))
+                    btn_prolong.grid(row=0, column=0, padx=(0, 4), sticky="ew")
+
+                    btn_checkout = ctk.CTkButton(
+                        btn_frame, 
+                        text="Check-Out", 
+                        fg_color="transparent",
+                        border_color=COLOR_BOOTSTRAP_DANGER,
+                        border_width=1,
+                        text_color=COLOR_BOOTSTRAP_DANGER,
+                        hover_color=COLOR_BOOTSTRAP_DANGER_BG,
+                        font=(FONT_FAMILY, 10, "bold"),
+                        command=lambda r_id=res["resident_id"], s_id=res["student_id"], name=res["full_name"]: self.quick_checkout_resident(r_id, s_id, name),
+                        height=28
+                    )
+                    btn_checkout.grid(row=0, column=1, padx=(4, 0), sticky="ew")
         except Exception as e:
             print(f"Error loading occupants detail: {e}")
 
@@ -488,6 +523,46 @@ class FloorEngineView(ctk.CTkFrame):
                 if self.selected_room:
                     self.inspect_room(self.selected_room)
             else:
-                messagebox.showinfo("Automation Audit Complete", "Auditing Complete!\n\nNo student resident booking allocations have reached expired check-out date targets today.", parent=self)
+                messagebox.showinfo("Automation Audit Complete", "Automation Audit Complete!\n\nNo student resident booking allocations have reached expired check-out date targets today.", parent=self)
         except Exception as e:
             messagebox.showerror("Automation Failure", f"Failed to execute stay audit:\n{e}", parent=self)
+
+    def quick_onboard_student(self, room):
+        parent_window = self.winfo_toplevel()
+        from gui.views.residents import ResidentOnboardingDialog
+        
+        def on_success():
+            self.load_floor_map()
+            refreshed_rooms = self.db.get_rooms()
+            for r in refreshed_rooms:
+                if r["room_id"] == room["room_id"]:
+                    self.inspect_room(r)
+                    break
+                    
+        dialog = ResidentOnboardingDialog(parent_window, self.db, on_success)
+        
+        label = f"Room {room['room_number']} ({room['type_name']} - {room['current_occupancy']}/{room['total_capacity']} Beds)"
+        if label in dialog.cmb_room.cget("values"):
+            dialog.cmb_room.set(label)
+            dialog.on_room_selected(label)
+            dialog.cmb_room.configure(state="disabled")
+
+    def quick_checkout_resident(self, resident_id, student_id, student_name):
+        confirm = messagebox.askyesno(
+            "Confirm Check-Out", 
+            f"Are you sure you want to trigger check-out for student resident {student_name} ({student_id})?\n\nThis will free up their bed allocation.",
+            parent=self
+        )
+        if confirm:
+            try:
+                self.db.delete_resident(resident_id)
+                messagebox.showinfo("Checked Out", f"Resident stays cleared for {student_name}.", parent=self)
+                self.load_floor_map()
+                if self.selected_room:
+                    refreshed_rooms = self.db.get_rooms()
+                    for r in refreshed_rooms:
+                        if r["room_id"] == self.selected_room["room_id"]:
+                            self.inspect_room(r)
+                            break
+            except Exception as e:
+                messagebox.showerror("Check-Out Failed", f"Database error during deletion:\n{e}", parent=self)

@@ -53,6 +53,7 @@ class ResidentOnboardingDialog(ctk.CTkToplevel):
         body_frame.pack(fill="both", expand=True, padx=20, pady=20)
         
         # Two-Column Layout
+        body_frame.rowconfigure(0, weight=1)
         body_frame.columnconfigure(0, weight=4) # Left Column: Descriptions & Notice
         body_frame.columnconfigure(1, weight=6) # Right Column: Scrollable Onboarding Form
         
@@ -118,8 +119,8 @@ class ResidentOnboardingDialog(ctk.CTkToplevel):
             border_color=COLOR_BOOTSTRAP_BORDER,
             border_width=1,
             corner_radius=12,
-            scrollbar_button_color=COLOR_BOOTSTRAP_BG,
-            scrollbar_button_hover_color=COLOR_BOOTSTRAP_BORDER
+            scrollbar_button_color=COLOR_BOOTSTRAP_BORDER,
+            scrollbar_button_hover_color=COLOR_BOOTSTRAP_TEXT_MUTED
         )
         right_col.grid(row=0, column=1, sticky="nsew", padx=(15, 0))
         
@@ -148,15 +149,45 @@ class ResidentOnboardingDialog(ctk.CTkToplevel):
         self.cmb_room = ctk.CTkComboBox(right_col, state="readonly", command=self.on_room_selected, font=(FONT_FAMILY, FONT_BODY_SIZE), width=340)
         self.cmb_room.pack(padx=20, pady=(2, 8))
         
-        ctk.CTkLabel(right_col, text="Check-In Date (YYYY-MM-DD):", font=(FONT_FAMILY, FONT_BODY_SIZE, "bold"), text_color=COLOR_BOOTSTRAP_TEXT_DARK).pack(anchor="w", padx=20)
-        self.ent_checkin = ctk.CTkEntry(right_col, font=(FONT_FAMILY, FONT_BODY_SIZE), width=340)
-        self.ent_checkin.pack(padx=20, pady=(2, 8))
-        self.ent_checkin.insert(0, datetime.now().strftime("%Y-%m-%d"))
+        # Check-In Date Comboboxes Frame
+        ctk.CTkLabel(right_col, text="Check-In Date:", font=(FONT_FAMILY, FONT_BODY_SIZE, "bold"), text_color=COLOR_BOOTSTRAP_TEXT_DARK).pack(anchor="w", padx=20)
+        checkin_frame = ctk.CTkFrame(right_col, fg_color="transparent")
+        checkin_frame.pack(fill="x", padx=20, pady=(2, 8))
         
-        ctk.CTkLabel(right_col, text="Check-Out Date (YYYY-MM-DD):", font=(FONT_FAMILY, FONT_BODY_SIZE, "bold"), text_color=COLOR_BOOTSTRAP_TEXT_DARK).pack(anchor="w", padx=20)
-        self.ent_checkout = ctk.CTkEntry(right_col, font=(FONT_FAMILY, FONT_BODY_SIZE), width=340)
-        self.ent_checkout.pack(padx=20, pady=(2, 15))
-        self.ent_checkout.insert(0, (datetime.now() + timedelta(days=150)).strftime("%Y-%m-%d"))
+        now = datetime.now()
+        years = [str(y) for y in range(now.year - 1, now.year + 6)]
+        months = [f"{m:02d}" for m in range(1, 13)]
+        days = [f"{d:02d}" for d in range(1, 32)]
+        
+        self.cmb_checkin_year = ctk.CTkComboBox(checkin_frame, values=years, state="readonly", width=100, font=(FONT_FAMILY, FONT_BODY_SIZE))
+        self.cmb_checkin_year.pack(side="left", padx=(0, 10))
+        self.cmb_checkin_year.set(now.strftime("%Y"))
+        
+        self.cmb_checkin_month = ctk.CTkComboBox(checkin_frame, values=months, state="readonly", width=80, font=(FONT_FAMILY, FONT_BODY_SIZE))
+        self.cmb_checkin_month.pack(side="left", padx=(0, 10))
+        self.cmb_checkin_month.set(now.strftime("%m"))
+        
+        self.cmb_checkin_day = ctk.CTkComboBox(checkin_frame, values=days, state="readonly", width=80, font=(FONT_FAMILY, FONT_BODY_SIZE))
+        self.cmb_checkin_day.pack(side="left")
+        self.cmb_checkin_day.set(now.strftime("%d"))
+        
+        # Check-Out Date Comboboxes Frame
+        ctk.CTkLabel(right_col, text="Check-Out Date:", font=(FONT_FAMILY, FONT_BODY_SIZE, "bold"), text_color=COLOR_BOOTSTRAP_TEXT_DARK).pack(anchor="w", padx=20)
+        checkout_frame = ctk.CTkFrame(right_col, fg_color="transparent")
+        checkout_frame.pack(fill="x", padx=20, pady=(2, 15))
+        
+        future_date = now + timedelta(days=150)
+        self.cmb_checkout_year = ctk.CTkComboBox(checkout_frame, values=years, state="readonly", width=100, font=(FONT_FAMILY, FONT_BODY_SIZE))
+        self.cmb_checkout_year.pack(side="left", padx=(0, 10))
+        self.cmb_checkout_year.set(future_date.strftime("%Y"))
+        
+        self.cmb_checkout_month = ctk.CTkComboBox(checkout_frame, values=months, state="readonly", width=80, font=(FONT_FAMILY, FONT_BODY_SIZE))
+        self.cmb_checkout_month.pack(side="left", padx=(0, 10))
+        self.cmb_checkout_month.set(future_date.strftime("%m"))
+        
+        self.cmb_checkout_day = ctk.CTkComboBox(checkout_frame, values=days, state="readonly", width=80, font=(FONT_FAMILY, FONT_BODY_SIZE))
+        self.cmb_checkout_day.pack(side="left")
+        self.cmb_checkout_day.set(future_date.strftime("%d"))
         
         # --- Section 2: Dynamic Room Assignment Allocation ---
         lbl_sec2 = ctk.CTkLabel(
@@ -263,16 +294,16 @@ class ResidentOnboardingDialog(ctk.CTkToplevel):
         name = self.ent_name.get().strip()
         major = self.ent_major.get().strip()
         room_sel = self.cmb_room.get()
-        checkin = self.ent_checkin.get().strip()
-        checkout = self.ent_checkout.get().strip()
+        checkin = f"{self.cmb_checkin_year.get()}-{self.cmb_checkin_month.get()}-{self.cmb_checkin_day.get()}"
+        checkout = f"{self.cmb_checkout_year.get()}-{self.cmb_checkout_month.get()}-{self.cmb_checkout_day.get()}"
         deposit_raw = self.ent_deposit.get().strip()
         fee_raw = self.ent_hostel_fee.get().strip()
         debt_raw = self.ent_debt.get().strip()
         status = self.cmb_status.get()
         probation = self.ent_probation.get("1.0", tk.END).strip()
 
-        if not student_id or not name or not major or not checkin or not checkout:
-            messagebox.showerror("Validation Error", "All basic personal details and dates must be completed.", parent=self)
+        if not student_id or not name or not major:
+            messagebox.showerror("Validation Error", "All basic personal details must be completed.", parent=self)
             return
 
         room = self.rooms_cache.get(room_sel)
@@ -295,10 +326,14 @@ class ResidentOnboardingDialog(ctk.CTkToplevel):
             return
 
         try:
-            datetime.strptime(checkin, "%Y-%m-%d")
-            datetime.strptime(checkout, "%Y-%m-%d")
+            checkin_dt = datetime.strptime(checkin, "%Y-%m-%d").date()
+            checkout_dt = datetime.strptime(checkout, "%Y-%m-%d").date()
         except ValueError:
-            messagebox.showerror("Validation Error", "Dates must match the format YYYY-MM-DD.", parent=self)
+            messagebox.showerror("Validation Error", "Invalid calendar date selected (e.g., February 31st). Please check your dates.", parent=self)
+            return
+
+        if checkout_dt <= checkin_dt:
+            messagebox.showerror("Validation Error", "Check-Out date must fall after the Check-In date.", parent=self)
             return
 
         if status == 'Probational Allocation' and not probation:
@@ -327,6 +362,420 @@ class ResidentOnboardingDialog(ctk.CTkToplevel):
             self.destroy()
         except Exception as e:
             messagebox.showerror("Onboarding Failed", f"Database failed to process registration. Check that Student ID is unique!\n\n{e}", parent=self)
+
+
+class ResidentEditDialog(ctk.CTkToplevel):
+    """Modern modal dialog to edit a student resident with a two-column Layout."""
+    def __init__(self, parent, db_manager, resident_id, on_success_callback):
+        super().__init__(parent)
+        self.db = db_manager
+        self.resident_id = resident_id
+        self.on_success = on_success_callback
+        self.rooms_cache = {}
+        
+        self.title("HMS - Edit Student Resident")
+        self.geometry("820x660")
+        self.resizable(False, False)
+        self.configure(fg_color=COLOR_BOOTSTRAP_BG)
+        
+        # Modal setup
+        self.transient(parent)
+        self.grab_set()
+        
+        self.create_widgets()
+        self.refresh_rooms_dropdown()
+        self.load_resident_data()
+
+    def create_widgets(self):
+        # Header banner frame
+        header = ctk.CTkFrame(self, fg_color=COLOR_BOOTSTRAP_SIDEBAR, height=80, corner_radius=0)
+        header.pack(fill="x", side="top")
+        header.pack_propagate(False)
+        
+        lbl_title = ctk.CTkLabel(
+            header, 
+            text="Student Profile Editor", 
+            text_color=COLOR_BOOTSTRAP_TEXT_WHITE, 
+            font=(FONT_FAMILY, FONT_TITLE_SIZE, "bold")
+        )
+        lbl_title.pack(pady=22, padx=25, anchor="w")
+        
+        # Main body container
+        body_frame = ctk.CTkFrame(self, fg_color="transparent")
+        body_frame.pack(fill="both", expand=True, padx=20, pady=20)
+        
+        # Two-Column Layout
+        body_frame.rowconfigure(0, weight=1)
+        body_frame.columnconfigure(0, weight=4) # Left Column: Descriptions & Notice
+        body_frame.columnconfigure(1, weight=6) # Right Column: Scrollable Form
+        
+        # --- Left Column: Onboarding Info & Alert Notice ---
+        left_col = ctk.CTkFrame(body_frame, fg_color="transparent")
+        left_col.grid(row=0, column=0, sticky="nsew", padx=(0, 15))
+        
+        lbl_left_title = ctk.CTkLabel(
+            left_col,
+            text="Profile Management",
+            font=(FONT_FAMILY, FONT_SUBTITLE_SIZE, "bold"),
+            text_color=COLOR_BOOTSTRAP_TEXT_DARK
+        )
+        lbl_left_title.pack(anchor="w", pady=(5, 5))
+        
+        lbl_left_desc = ctk.CTkLabel(
+            left_col,
+            text="Modify academic information or adjust room allocation. When transferring to a new room, the ledger automatically balances occupancy counters.",
+            font=(FONT_FAMILY, FONT_BODY_SIZE),
+            text_color=COLOR_BOOTSTRAP_TEXT_MUTED,
+            wraplength=310,
+            justify="left"
+        )
+        lbl_left_desc.pack(anchor="w", pady=(0, 20))
+        
+        # Dynamic Safety Notice Box
+        safety_box = ctk.CTkFrame(
+            left_col,
+            fg_color="#ecfdf5",
+            border_color="#10b981",
+            border_width=1,
+            corner_radius=8
+        )
+        safety_box.pack(fill="x", pady=10)
+        
+        lbl_safety_title = ctk.CTkLabel(
+            safety_box,
+            text="★ Room Transfer Notice",
+            font=(FONT_FAMILY, 11, "bold"),
+            text_color="#047857"
+        )
+        lbl_safety_title.pack(anchor="w", padx=15, pady=(10, 2))
+        
+        safety_text = (
+            "Transferring a resident will decrement their current room's occupancy "
+            "and increment the target room's occupancy automatically in the database."
+        )
+        lbl_safety_body = ctk.CTkLabel(
+            safety_box,
+            text=safety_text,
+            font=(FONT_FAMILY, 10),
+            text_color="#065f46",
+            justify="left",
+            wraplength=270
+        )
+        lbl_safety_body.pack(anchor="w", padx=15, pady=(0, 10))
+        
+        # --- Right Column: Scrollable Form Container ---
+        right_col = ctk.CTkScrollableFrame(
+            body_frame,
+            fg_color=COLOR_BOOTSTRAP_CARD,
+            border_color=COLOR_BOOTSTRAP_BORDER,
+            border_width=1,
+            corner_radius=12,
+            scrollbar_button_color=COLOR_BOOTSTRAP_BORDER,
+            scrollbar_button_hover_color=COLOR_BOOTSTRAP_TEXT_MUTED
+        )
+        right_col.grid(row=0, column=1, sticky="nsew", padx=(15, 0))
+        
+        # --- Section 1: Personal Records ---
+        lbl_sec1 = ctk.CTkLabel(
+            right_col,
+            text="1. PERSONAL RECORDS",
+            font=(FONT_FAMILY, 10, "bold"),
+            text_color=COLOR_BOOTSTRAP_PRIMARY
+        )
+        lbl_sec1.pack(anchor="w", padx=20, pady=(15, 10))
+        
+        ctk.CTkLabel(right_col, text="Student ID Number:", font=(FONT_FAMILY, FONT_BODY_SIZE, "bold"), text_color=COLOR_BOOTSTRAP_TEXT_DARK).pack(anchor="w", padx=20)
+        self.ent_student_id = ctk.CTkEntry(right_col, font=(FONT_FAMILY, FONT_BODY_SIZE), placeholder_text="e.g. STU-2026-0012", width=340)
+        self.ent_student_id.pack(padx=20, pady=(2, 8))
+        
+        ctk.CTkLabel(right_col, text="Resident Full Name:", font=(FONT_FAMILY, FONT_BODY_SIZE, "bold"), text_color=COLOR_BOOTSTRAP_TEXT_DARK).pack(anchor="w", padx=20)
+        self.ent_name = ctk.CTkEntry(right_col, font=(FONT_FAMILY, FONT_BODY_SIZE), placeholder_text="e.g. Alex Mercer", width=340)
+        self.ent_name.pack(padx=20, pady=(2, 8))
+        
+        ctk.CTkLabel(right_col, text="Academic Major / Program:", font=(FONT_FAMILY, FONT_BODY_SIZE, "bold"), text_color=COLOR_BOOTSTRAP_TEXT_DARK).pack(anchor="w", padx=20)
+        self.ent_major = ctk.CTkEntry(right_col, font=(FONT_FAMILY, FONT_BODY_SIZE), placeholder_text="e.g. Computer Science", width=340)
+        self.ent_major.pack(padx=20, pady=(2, 8))
+        
+        ctk.CTkLabel(right_col, text="Assign Room Unit:", font=(FONT_FAMILY, FONT_BODY_SIZE, "bold"), text_color=COLOR_BOOTSTRAP_TEXT_DARK).pack(anchor="w", padx=20)
+        self.cmb_room = ctk.CTkComboBox(right_col, state="readonly", command=self.on_room_selected, font=(FONT_FAMILY, FONT_BODY_SIZE), width=340)
+        self.cmb_room.pack(padx=20, pady=(2, 8))
+        
+        # Check-In Date Comboboxes Frame
+        ctk.CTkLabel(right_col, text="Check-In Date:", font=(FONT_FAMILY, FONT_BODY_SIZE, "bold"), text_color=COLOR_BOOTSTRAP_TEXT_DARK).pack(anchor="w", padx=20)
+        checkin_frame = ctk.CTkFrame(right_col, fg_color="transparent")
+        checkin_frame.pack(fill="x", padx=20, pady=(2, 8))
+        
+        now = datetime.now()
+        years = [str(y) for y in range(now.year - 1, now.year + 6)]
+        months = [f"{m:02d}" for m in range(1, 13)]
+        days = [f"{d:02d}" for d in range(1, 32)]
+        
+        self.cmb_checkin_year = ctk.CTkComboBox(checkin_frame, values=years, state="readonly", width=100, font=(FONT_FAMILY, FONT_BODY_SIZE))
+        self.cmb_checkin_year.pack(side="left", padx=(0, 10))
+        
+        self.cmb_checkin_month = ctk.CTkComboBox(checkin_frame, values=months, state="readonly", width=80, font=(FONT_FAMILY, FONT_BODY_SIZE))
+        self.cmb_checkin_month.pack(side="left", padx=(0, 10))
+        
+        self.cmb_checkin_day = ctk.CTkComboBox(checkin_frame, values=days, state="readonly", width=80, font=(FONT_FAMILY, FONT_BODY_SIZE))
+        self.cmb_checkin_day.pack(side="left")
+        
+        # Check-Out Date Comboboxes Frame
+        ctk.CTkLabel(right_col, text="Check-Out Date:", font=(FONT_FAMILY, FONT_BODY_SIZE, "bold"), text_color=COLOR_BOOTSTRAP_TEXT_DARK).pack(anchor="w", padx=20)
+        checkout_frame = ctk.CTkFrame(right_col, fg_color="transparent")
+        checkout_frame.pack(fill="x", padx=20, pady=(2, 15))
+        
+        self.cmb_checkout_year = ctk.CTkComboBox(checkout_frame, values=years, state="readonly", width=100, font=(FONT_FAMILY, FONT_BODY_SIZE))
+        self.cmb_checkout_year.pack(side="left", padx=(0, 10))
+        
+        self.cmb_checkout_month = ctk.CTkComboBox(checkout_frame, values=months, state="readonly", width=80, font=(FONT_FAMILY, FONT_BODY_SIZE))
+        self.cmb_checkout_month.pack(side="left", padx=(0, 10))
+        
+        self.cmb_checkout_day = ctk.CTkComboBox(checkout_frame, values=days, state="readonly", width=80, font=(FONT_FAMILY, FONT_BODY_SIZE))
+        self.cmb_checkout_day.pack(side="left")
+        
+        # --- Section 2: Dynamic Room Assignment Allocation ---
+        lbl_sec2 = ctk.CTkLabel(
+            right_col,
+            text="2. DYNAMIC ROOM ASSIGNMENT ALLOCATION",
+            font=(FONT_FAMILY, 10, "bold"),
+            text_color=COLOR_BOOTSTRAP_PRIMARY
+        )
+        lbl_sec2.pack(anchor="w", padx=20, pady=(10, 10))
+        
+        ctk.CTkLabel(right_col, text="Security Deposit Paid ($):", font=(FONT_FAMILY, FONT_BODY_SIZE, "bold"), text_color=COLOR_BOOTSTRAP_TEXT_DARK).pack(anchor="w", padx=20)
+        self.ent_deposit = ctk.CTkEntry(right_col, font=(FONT_FAMILY, FONT_BODY_SIZE), width=340)
+        self.ent_deposit.pack(padx=20, pady=(2, 8))
+        
+        ctk.CTkLabel(right_col, text="Hostel Tuition Fee ($):", font=(FONT_FAMILY, FONT_BODY_SIZE, "bold"), text_color=COLOR_BOOTSTRAP_TEXT_DARK).pack(anchor="w", padx=20)
+        self.ent_hostel_fee = ctk.CTkEntry(right_col, font=(FONT_FAMILY, FONT_BODY_SIZE), width=340)
+        self.ent_hostel_fee.pack(padx=20, pady=(2, 8))
+        
+        ctk.CTkLabel(right_col, text="Academic Tuition Debt ($):", font=(FONT_FAMILY, FONT_BODY_SIZE, "bold"), text_color=COLOR_BOOTSTRAP_TEXT_DARK).pack(anchor="w", padx=20)
+        self.ent_debt = ctk.CTkEntry(right_col, font=(FONT_FAMILY, FONT_BODY_SIZE), width=340)
+        self.ent_debt.pack(padx=20, pady=(2, 8))
+        
+        ctk.CTkLabel(right_col, text="Allocation Ledger Status:", font=(FONT_FAMILY, FONT_BODY_SIZE, "bold"), text_color=COLOR_BOOTSTRAP_TEXT_DARK).pack(anchor="w", padx=20)
+        self.cmb_status = ctk.CTkComboBox(
+            right_col, 
+            values=['Fully Registered', 'Probational Allocation', 'Outstanding Arrears'], 
+            state="readonly",
+            command=self.toggle_probation_field,
+            font=(FONT_FAMILY, FONT_BODY_SIZE),
+            width=340
+        )
+        self.cmb_status.pack(padx=20, pady=(2, 8))
+        
+        ctk.CTkLabel(right_col, text="Probation Approval Reason (If Applicable):", font=(FONT_FAMILY, FONT_BODY_SIZE, "bold"), text_color=COLOR_BOOTSTRAP_TEXT_DARK).pack(anchor="w", padx=20)
+        self.ent_probation = ctk.CTkTextbox(
+            right_col, 
+            height=60, 
+            font=(FONT_FAMILY, FONT_BODY_SIZE), 
+            border_color=COLOR_BOOTSTRAP_BORDER, 
+            border_width=1,
+            corner_radius=8,
+            width=340
+        )
+        self.ent_probation.pack(padx=20, pady=(2, 20))
+        
+        btn_save = ctk.CTkButton(
+            right_col, 
+            text="Save Profile Changes & Commit", 
+            fg_color=COLOR_BOOTSTRAP_PRIMARY, 
+            hover_color=COLOR_BOOTSTRAP_PRIMARY_HOVER,
+            text_color=COLOR_BOOTSTRAP_TEXT_WHITE,
+            font=(FONT_FAMILY, FONT_BODY_SIZE, "bold"),
+            command=self.save_resident,
+            height=38,
+            width=340
+        )
+        btn_save.pack(padx=20, pady=(5, 20))
+
+    def refresh_rooms_dropdown(self):
+        try:
+            records = self.db.get_rooms()
+            options = []
+            self.rooms_cache.clear()
+            for r in records:
+                label = f"Room {r['room_number']} ({r['type_name']} - {r['current_occupancy']}/{r['total_capacity']} Beds)"
+                options.append(label)
+                self.rooms_cache[label] = r
+                    
+            self.cmb_room.configure(values=options)
+        except Exception as e:
+            print(f"Error loading dropdown options: {e}")
+
+    def on_room_selected(self, choice=None):
+        selected = self.cmb_room.get()
+        room = self.rooms_cache.get(selected)
+        if room:
+            pass
+
+    def toggle_probation_field(self, choice=None):
+        status = self.cmb_status.get()
+        if status == 'Probational Allocation':
+            self.ent_probation.configure(state="normal", fg_color="#ffffff", text_color=COLOR_BOOTSTRAP_TEXT_DARK)
+        else:
+            self.ent_probation.delete("1.0", tk.END)
+            self.ent_probation.configure(state="disabled", fg_color=COLOR_BOOTSTRAP_BG)
+
+    def load_resident_data(self):
+        try:
+            r = self.db.fetch_one("SELECT * FROM Residents WHERE resident_id = %s", (self.resident_id,))
+            if not r:
+                messagebox.showerror("Error", "Resident record not found.", parent=self)
+                self.grab_release()
+                self.destroy()
+                return
+            
+            # Prepopulate personal records
+            self.ent_student_id.insert(0, r["student_id"])
+            self.ent_name.insert(0, r["full_name"])
+            self.ent_major.insert(0, r["academic_major"])
+            
+            # Prepopulate check-in date comboboxes
+            try:
+                ch_in = datetime.strptime(str(r["check_in_date"]), "%Y-%m-%d")
+                self.cmb_checkin_year.set(ch_in.strftime("%Y"))
+                self.cmb_checkin_month.set(ch_in.strftime("%m"))
+                self.cmb_checkin_day.set(ch_in.strftime("%d"))
+            except Exception:
+                pass
+                
+            # Prepopulate check-out date comboboxes
+            try:
+                ch_out = datetime.strptime(str(r["check_out_date"]), "%Y-%m-%d")
+                self.cmb_checkout_year.set(ch_out.strftime("%Y"))
+                self.cmb_checkout_month.set(ch_out.strftime("%m"))
+                self.cmb_checkout_day.set(ch_out.strftime("%d"))
+            except Exception:
+                pass
+            
+            # Prepopulate financial records
+            self.ent_deposit.delete(0, tk.END)
+            self.ent_deposit.insert(0, f"{float(r['deposit_paid']):.2f}")
+            
+            self.ent_hostel_fee.delete(0, tk.END)
+            self.ent_hostel_fee.insert(0, f"{float(r['hostel_tuition_fee']):.2f}")
+            
+            self.ent_debt.delete(0, tk.END)
+            self.ent_debt.insert(0, f"{float(r['academic_tuition_debt']):.2f}")
+            
+            self.cmb_status.set(r["allocation_status"])
+            
+            # Set the room in the dropdown
+            room_record = self.db.fetch_one("SELECT r.room_number, t.type_name, r.current_occupancy, r.total_capacity FROM Rooms r JOIN Room_Types t ON r.room_type_id = t.room_type_id WHERE r.room_id = %s", (r["room_id"],))
+            if room_record:
+                label = f"Room {room_record['room_number']} ({room_record['type_name']} - {room_record['current_occupancy']}/{room_record['total_capacity']} Beds)"
+                
+                vals = list(self.cmb_room.cget("values"))
+                if label not in vals:
+                    vals.append(label)
+                    self.cmb_room.configure(values=vals)
+                self.cmb_room.set(label)
+                self.rooms_cache[label] = {
+                    "room_id": r["room_id"],
+                    "room_number": room_record["room_number"],
+                    "current_occupancy": room_record["current_occupancy"],
+                    "total_capacity": room_record["total_capacity"]
+                }
+            
+            if r["allocation_status"] == 'Probational Allocation':
+                self.ent_probation.configure(state="normal", fg_color="#ffffff", text_color=COLOR_BOOTSTRAP_TEXT_DARK)
+                self.ent_probation.delete("1.0", tk.END)
+                self.ent_probation.insert("1.0", r["probation_reason"] or "")
+            else:
+                self.ent_probation.configure(state="disabled", fg_color=COLOR_BOOTSTRAP_BG)
+                
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to load resident details:\n{e}", parent=self)
+            self.grab_release()
+            self.destroy()
+
+    def save_resident(self):
+        student_id = self.ent_student_id.get().strip()
+        name = self.ent_name.get().strip()
+        major = self.ent_major.get().strip()
+        room_sel = self.cmb_room.get()
+        checkin = f"{self.cmb_checkin_year.get()}-{self.cmb_checkin_month.get()}-{self.cmb_checkin_day.get()}"
+        checkout = f"{self.cmb_checkout_year.get()}-{self.cmb_checkout_month.get()}-{self.cmb_checkout_day.get()}"
+        deposit_raw = self.ent_deposit.get().strip()
+        fee_raw = self.ent_hostel_fee.get().strip()
+        debt_raw = self.ent_debt.get().strip()
+        status = self.cmb_status.get()
+        probation = self.ent_probation.get("1.0", tk.END).strip()
+
+        if not student_id or not name or not major:
+            messagebox.showerror("Validation Error", "All basic personal details must be completed.", parent=self)
+            return
+
+        # Fetch original room ID
+        original_room_id = None
+        try:
+            res_info = self.db.fetch_one("SELECT room_id FROM Residents WHERE resident_id = %s", (self.resident_id,))
+            if res_info:
+                original_room_id = res_info["room_id"]
+        except Exception:
+            pass
+
+        room = self.rooms_cache.get(room_sel)
+        if not room:
+            messagebox.showerror("Validation Error", "Please select a valid room unit allocation.", parent=self)
+            return
+
+        # Check capacity only if transferring rooms
+        if room["room_id"] != original_room_id:
+            if room["current_occupancy"] >= room["total_capacity"]:
+                messagebox.showerror("Validation Error", "Target room is fully booked. Select another unit.", parent=self)
+                return
+
+        try:
+            deposit = float(deposit_raw)
+            fee = float(fee_raw)
+            debt = float(debt_raw)
+            if deposit < 0 or fee < 0 or debt < 0:
+                raise ValueError()
+        except ValueError:
+            messagebox.showerror("Validation Error", "Financial entries must be non-negative values.", parent=self)
+            return
+
+        try:
+            checkin_dt = datetime.strptime(checkin, "%Y-%m-%d").date()
+            checkout_dt = datetime.strptime(checkout, "%Y-%m-%d").date()
+        except ValueError:
+            messagebox.showerror("Validation Error", "Invalid calendar date selected. Please check dates.", parent=self)
+            return
+
+        if checkout_dt <= checkin_dt:
+            messagebox.showerror("Validation Error", "Check-Out date must fall after the Check-In date.", parent=self)
+            return
+
+        if status == 'Probational Allocation' and not probation:
+            messagebox.showerror("Validation Error", "Probation Allocation requires a clear Approval Reason.", parent=self)
+            return
+
+        probation_val = probation if status == 'Probational Allocation' else None
+
+        try:
+            self.db.update_resident(
+                resident_id=self.resident_id,
+                room_id=room["room_id"],
+                student_id=student_id,
+                full_name=name,
+                academic_major=major,
+                check_in_date=checkin,
+                check_out_date=checkout,
+                deposit_paid=deposit,
+                hostel_tuition_fee=fee,
+                academic_tuition_debt=debt,
+                allocation_status=status,
+                probation_reason=probation_val
+            )
+            messagebox.showinfo("Success", f"Resident '{name}' details successfully updated.", parent=self)
+            self.on_success()
+            self.grab_release()
+            self.destroy()
+        except Exception as e:
+            messagebox.showerror("Update Failed", f"Database failed to commit changes:\n{e}", parent=self)
 
 
 class ResidentsView(ctk.CTkFrame):
@@ -474,6 +923,10 @@ class ResidentsView(ctk.CTkFrame):
         parent_window = self.winfo_toplevel()
         ResidentOnboardingDialog(parent_window, self.db, self.search_residents)
 
+    def open_edit_dialog(self, resident_id):
+        parent_window = self.winfo_toplevel()
+        ResidentEditDialog(parent_window, self.db, resident_id, self.search_residents)
+
     def on_search_key(self, event):
         self.search_residents()
 
@@ -531,6 +984,7 @@ class ResidentsView(ctk.CTkFrame):
             pass
 
         menu = tk.Menu(self, tearoff=0)
+        menu.add_command(label=f"Edit Profile / Room for {student_name}", command=lambda: self.open_edit_dialog(resident_id))
         menu.add_command(label=f"Extend Stay for {student_name}", command=lambda: self.show_prolong_dialog(resident_id, student_name, current_checkout))
         menu.add_separator()
         menu.add_command(label=f"Check-Out / Remove {student_name}", command=lambda: self.checkout_resident(resident_id, student_id, student_name))

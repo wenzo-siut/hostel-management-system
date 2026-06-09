@@ -29,9 +29,14 @@ def check_dependencies():
 
 if __name__ == "__main__":
     # Ensure current working directory is set to project root folder to resolve JSON configurations and DB paths
-    project_dir = os.path.dirname(os.path.abspath(__file__))
+    if getattr(sys, 'frozen', False):
+        project_dir = os.path.dirname(sys.executable)
+        sys.path.insert(0, sys._MEIPASS)
+    else:
+        project_dir = os.path.dirname(os.path.abspath(__file__))
+        sys.path.insert(0, project_dir)
+    
     os.chdir(project_dir)
-    sys.path.insert(0, project_dir)
     
     # Perform automated dependency checks
     check_dependencies()

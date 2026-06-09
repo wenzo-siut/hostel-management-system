@@ -18,7 +18,7 @@ class RoomRegistrationDialog(ctk.CTkToplevel):
         self.room_types_cache = {}
         
         self.title("HMS - Register Room Unit")
-        self.geometry("760x520")
+        self.geometry("760x580")
         self.resizable(False, False)
         self.configure(fg_color=COLOR_BOOTSTRAP_BG)
         
@@ -28,7 +28,7 @@ class RoomRegistrationDialog(ctk.CTkToplevel):
         
         self.create_widgets()
         self.refresh_room_types_dropdown()
-
+ 
     def create_widgets(self):
         # Header banner frame
         header = ctk.CTkFrame(self, fg_color=COLOR_BOOTSTRAP_SIDEBAR, height=80, corner_radius=0)
@@ -48,6 +48,7 @@ class RoomRegistrationDialog(ctk.CTkToplevel):
         body_frame.pack(fill="both", expand=True, padx=20, pady=20)
         
         # Two-Column Layout
+        body_frame.rowconfigure(0, weight=1)
         body_frame.columnconfigure(0, weight=1) # Left Column: Descriptions & Notice
         body_frame.columnconfigure(1, weight=1) # Right Column: Form fields
         

@@ -423,6 +423,14 @@ class MainWindow(ctk.CTk):
             self.login_view.destroy()
             self.login_view = None
         self.build_layout()
+        
+        # Run automatic checkout audit on startup
+        try:
+            checked_out, rooms_affected = self.db.run_automated_checkout()
+            if checked_out > 0:
+                print(f"HMS Startup Audit: Automatically checked out {checked_out} expired residents across {rooms_affected} rooms.")
+        except Exception as e:
+            print(f"HMS Startup Warning: Failed to run automated stay audit:\n{e}")
 
     def build_layout(self):
         # Sidebar Frame Navigation Pane
@@ -451,7 +459,7 @@ class MainWindow(ctk.CTk):
         
         lbl_logo = ctk.CTkLabel(
             logo_container, 
-            text="H HMS Admin", 
+            text="HMS Admin", 
             text_color=COLOR_BOOTSTRAP_TEXT_WHITE, 
             font=(FONT_FAMILY, FONT_SUBTITLE_SIZE, "bold")
         )
@@ -491,13 +499,13 @@ class MainWindow(ctk.CTk):
         status_container.pack(fill="x", side="bottom")
         status_container.pack_propagate(False)
         
-        lbl_conn = ctk.CTkLabel(
+        self.lbl_conn = ctk.CTkLabel(
             status_container, 
-            text="Connection: Secure", 
-            text_color="#4ade80", # Green text for secure status
+            text="Connection: Testing...", 
+            text_color="#60a5fa", 
             font=(FONT_FAMILY, 10, "bold")
         )
-        lbl_conn.pack(pady=(10, 2), padx=20, anchor="w")
+        self.lbl_conn.pack(pady=(10, 2), padx=20, anchor="w")
 
         lbl_version = ctk.CTkLabel(
             status_container, 
@@ -506,6 +514,9 @@ class MainWindow(ctk.CTk):
             font=(FONT_FAMILY, 9, "normal")
         )
         lbl_version.pack(pady=(0, 10), padx=20, anchor="w")
+        
+        # Start DB health check polling loop
+        self.poll_db_health()
 
     def on_reconfigured(self):
         for child in self.content_frame.winfo_children():
@@ -580,3 +591,14 @@ class MainWindow(ctk.CTk):
             ctk.CTkLabel(err_frame, text="View Loading Error", font=(FONT_FAMILY, FONT_TITLE_SIZE, "bold"), text_color="#ef4444").pack(pady=40)
             ctk.CTkLabel(err_frame, text=f"Unable to load view '{view_key}':\n{e}", font=(FONT_FAMILY, FONT_BODY_SIZE), text_color=COLOR_BOOTSTRAP_TEXT_WHITE).pack(pady=10)
             print(f"Viewport Swapping Exception: {e}")
+
+    def poll_db_health(self):
+        """Pings the database to verify connectivity and updates the sidebar connection status."""
+        try:
+            self.db.check_connection()
+            db_name = self.db.db_type.upper()
+            self.lbl_conn.configure(text=f"Connection: Live ({db_name})", text_color="#4ade80")
+        except Exception:
+            self.lbl_conn.configure(text="Connection: Disconnected", text_color="#ef4444")
+            
+        self.after(15000, self.poll_db_health)

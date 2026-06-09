@@ -1,6 +1,8 @@
 import tkinter as tk
-from tkinter import messagebox
+from tkinter import messagebox, filedialog
 import customtkinter as ctk
+import os
+from datetime import datetime
 
 from gui.theme import (
     COLOR_BOOTSTRAP_BG, COLOR_BOOTSTRAP_CARD, COLOR_BOOTSTRAP_BORDER,
@@ -34,21 +36,7 @@ class ReportsView(ctk.CTkFrame):
         )
         lbl_desc.pack(side="left", padx=20, pady=12)
 
-        # Export Buttons (Slide 9 colors: Green for Excel, Red/White for PDF)
-        btn_excel = ctk.CTkButton(
-            action_bar,
-            text="Export MS Excel",
-            fg_color="#15803d", # Green
-            hover_color="#166534",
-            text_color="#ffffff",
-            font=(FONT_FAMILY, FONT_BODY_SIZE, "bold"),
-            command=self.export_excel,
-            height=36,
-            width=140,
-            corner_radius=8
-        )
-        btn_excel.pack(side="right", padx=(5, 20), pady=12)
-
+        # Export Buttons (Slide 9 colors: Red/White for PDF)
         btn_pdf = ctk.CTkButton(
             action_bar,
             text="Download PDF Report",
@@ -61,7 +49,7 @@ class ReportsView(ctk.CTkFrame):
             width=170,
             corner_radius=8
         )
-        btn_pdf.pack(side="right", padx=5, pady=12)
+        btn_pdf.pack(side="right", padx=20, pady=12)
 
         # Main view divided into two columns
         content_frame = ctk.CTkFrame(self, fg_color="transparent")
@@ -228,8 +216,107 @@ class ReportsView(ctk.CTkFrame):
             divider = ctk.CTkFrame(parent, fg_color=COLOR_BOOTSTRAP_BORDER, height=1)
             divider.pack(fill="x", pady=(2, 0))
 
-    def export_excel(self):
-        messagebox.showinfo("Export Success", "HMS System Ledger data exported successfully into: 'HMS_Onboarding_Ledger_2026.xlsx'", parent=self)
 
     def export_pdf(self):
-        messagebox.showinfo("Export Success", "HMS Administrative BI Report successfully compiled and downloaded as: 'HMS_BI_Report_v1.4.2.pdf'", parent=self)
+        try:
+            residents = self.db.search_residents()
+            if not residents:
+                messagebox.showwarning("No Data", "There are no resident records to export.", parent=self)
+                return
+            
+            # Open file dialog for HTML report (which can be printed to PDF)
+            file_path = filedialog.asksaveasfilename(
+                parent=self,
+                title="Save Printable HTML Report",
+                filetypes=[("HTML Document (*.html)", "*.html"), ("All Files (*.*)", "*.*")],
+                defaultextension=".html",
+                initialfile="HMS_BI_Report_2026.html"
+            )
+            
+            if not file_path:
+                return # User cancelled
+                
+            # Create HTML rows
+            html_rows = ""
+            for res in residents:
+                html_rows += f"""
+                <tr>
+                    <td>{res.get('student_id', '')}</td>
+                    <td>{res.get('full_name', '')}</td>
+                    <td>{res.get('room_number', '')}</td>
+                    <td>{res.get('type_name', '')}</td>
+                    <td>{res.get('academic_major', '')}</td>
+                    <td>{res.get('check_in_date', '')}</td>
+                    <td>{res.get('check_out_date', '')}</td>
+                    <td>${float(res.get('deposit_paid', 0)):,.2f}</td>
+                    <td>${float(res.get('hostel_tuition_fee', 0)):,.2f}</td>
+                    <td>${float(res.get('academic_tuition_debt', 0)):,.2f}</td>
+                    <td><span class="status-badge {res.get('allocation_status', '').lower().replace(' ', '-')}">{res.get('allocation_status', '')}</span></td>
+                </tr>
+                """
+                
+            now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            html_content = f"""<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Hostel Management System - Administrative BI Report</title>
+    <style>
+        body {{ font-family: 'Segoe UI', Arial, sans-serif; color: #1e293b; margin: 40px; background-color: #f8fafc; }}
+        .header {{ margin-bottom: 30px; border-bottom: 2px solid #cbd5e1; padding-bottom: 20px; }}
+        h1 {{ color: #0f172a; margin: 0 0 10px 0; font-size: 28px; }}
+        .meta {{ color: #64748b; font-size: 14px; }}
+        table {{ width: 100%; border-collapse: collapse; margin-top: 20px; background: #ffffff; box-shadow: 0 1px 3px rgba(0,0,0,0.1); border-radius: 8px; overflow: hidden; }}
+        th, td {{ padding: 12px 15px; text-align: left; font-size: 13px; }}
+        th {{ background-color: #0f172a; color: #ffffff; font-weight: 600; text-transform: uppercase; font-size: 11px; letter-spacing: 0.5px; }}
+        tr {{ border-bottom: 1px solid #e2e8f0; }}
+        tr:nth-child(even) {{ background-color: #f8fafc; }}
+        .status-badge {{ padding: 4px 8px; border-radius: 12px; font-size: 11px; font-weight: bold; display: inline-block; }}
+        .fully-registered {{ background-color: #dcfce7; color: #15803d; }}
+        .probation {{ background-color: #fee2e2; color: #b91c1c; }}
+        .pending {{ background-color: #fef9c3; color: #a16207; }}
+        @media print {{
+            body {{ background-color: #ffffff; margin: 0; }}
+            table {{ box-shadow: none; }}
+        }}
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Hostel Management System</h1>
+        <h2>Administrative Business Intelligence Report</h2>
+        <div class="meta">Generated on: {now_str} | Total Records: {len(residents)}</div>
+    </div>
+    <table>
+        <thead>
+            <tr>
+                <th>Student ID</th>
+                <th>Full Name</th>
+                <th>Room</th>
+                <th>Room Type</th>
+                <th>Major</th>
+                <th>Check-In</th>
+                <th>Check-Out</th>
+                <th>Deposit</th>
+                <th>Tuition Fee</th>
+                <th>Academic Debt</th>
+                <th>Status</th>
+            </tr>
+        </thead>
+        <tbody>
+            {html_rows}
+        </tbody>
+    </table>
+</body>
+</html>
+"""
+            with open(file_path, "w", encoding="utf-8") as f:
+                f.write(html_content)
+                
+            messagebox.showinfo(
+                "Export Success",
+                f"HMS Report exported successfully as HTML to:\n'{file_path}'\n\nTip: You can open this file in any web browser (Chrome, Edge, etc.) and press 'Ctrl + P' (Print) to save it directly as a PDF.",
+                parent=self
+            )
+        except Exception as e:
+            messagebox.showerror("Export Error", f"Failed to export PDF/HTML report:\n{e}", parent=self)

@@ -282,9 +282,53 @@ class DashboardView(ctk.CTkFrame):
         if width <= 50 or height <= 50:
             return
 
-        months = ["Nov", "Dec", "Jan", "Feb", "Mar", "Apr"]
-        values = [14, 25, 45, 30, 48, 62]  # Presentation mock values
-        max_val = 80
+        from datetime import date, datetime
+        from collections import defaultdict
+        
+        # Calculate last 6 months list dynamically
+        today = date.today()
+        months_list = []
+        for i in range(5, -1, -1):
+            m = today.month - i
+            y = today.year
+            while m <= 0:
+                m += 12
+                y -= 1
+            months_list.append((y, m))
+
+        month_names = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+        months = [f"{month_names[m-1]} {str(y)[2:]}" for (y, m) in months_list]
+
+        # Gather data from DB
+        counts = defaultdict(int)
+        try:
+            records = self.db.fetch_all("SELECT check_in_date FROM Residents")
+            for r in records:
+                try:
+                    dt_val = r["check_in_date"]
+                    if isinstance(dt_val, str):
+                        dt = datetime.strptime(dt_val[:10], "%Y-%m-%d").date()
+                    elif isinstance(dt_val, (date, datetime)):
+                        dt = dt_val
+                    else:
+                        continue
+                    if (dt.year, dt.month) in months_list:
+                        counts[(dt.year, dt.month)] += 1
+                except Exception:
+                    pass
+        except Exception as e:
+            print(f"Error querying dashboard booking trends: {e}")
+
+        values = [counts[m_tuple] for m_tuple in months_list]
+
+        # Determine y-axis scale based on data
+        max_val = max(values)
+        if max_val <= 0:
+            max_val = 5
+        else:
+            max_val = int(max_val * 1.3)
+            if max_val < 5:
+                max_val = 5
 
         margin_y = 20
         margin_x = 30
@@ -295,7 +339,8 @@ class DashboardView(ctk.CTkFrame):
         bar_w = col_w * 0.55
 
         # Draw gridlines & labels
-        for y_tick in range(0, max_val + 1, 20):
+        tick_step = max(1, max_val // 4)
+        for y_tick in range(0, max_val + 1, tick_step):
             norm_y = y_tick / max_val
             canvas_y = margin_y + chart_h * (1 - norm_y)
             self.bar_canvas.create_line(margin_x, canvas_y, width - margin_x, canvas_y, fill="#e2e8f0", dash=(2, 2))
@@ -344,6 +389,17 @@ class DashboardView(ctk.CTkFrame):
         if width <= 50 or height <= 50:
             return
 
+        # Fetch live metrics
+        try:
+            kpis = self.db.get_kpi_metrics()
+            occupied = kpis["occupied_beds"]
+            total = kpis["occupied_beds"] + kpis["open_beds"]
+        except Exception:
+            occupied = 0
+            total = 0
+
+        pct = int((occupied / total) * 100) if total > 0 else 0
+
         # Circle bbox
         size = min(width, height) - 40
         x1 = (width - size) / 2
@@ -351,19 +407,24 @@ class DashboardView(ctk.CTkFrame):
         x2 = x1 + size
         y2 = y1 + size
 
-        # Arc values: 75% Occupancy (Green), 25% Vacant (Red)
-        # Green arc starts at 0, extent is 270 degrees
-        self.donut_canvas.create_arc(
-            x1, y1, x2, y2,
-            start=90, extent=-270, # clockwise 270 degrees from top
-            fill="#16a34a", outline="#16a34a", width=0
-        )
-        # Red arc starts at -270 (or 180), extent is -90 degrees
-        self.donut_canvas.create_arc(
-            x1, y1, x2, y2,
-            start=180, extent=-90,
-            fill="#dc2626", outline="#dc2626", width=0
-        )
+        # Draw arcs based on live occupancy percentage
+        if pct == 0:
+            self.donut_canvas.create_oval(x1, y1, x2, y2, fill="#dc2626", outline="#dc2626", width=0)
+        elif pct == 100:
+            self.donut_canvas.create_oval(x1, y1, x2, y2, fill="#16a34a", outline="#16a34a", width=0)
+        else:
+            green_extent = - (pct / 100.0) * 360
+            self.donut_canvas.create_arc(
+                x1, y1, x2, y2,
+                start=90, extent=green_extent,
+                fill="#16a34a", outline="#16a34a", width=0
+            )
+            red_extent = -360 - green_extent
+            self.donut_canvas.create_arc(
+                x1, y1, x2, y2,
+                start=90 + green_extent, extent=red_extent,
+                fill="#dc2626", outline="#dc2626", width=0
+            )
 
         # Center circle to make it a donut
         hole_size = size * 0.55
@@ -382,7 +443,7 @@ class DashboardView(ctk.CTkFrame):
         # Center Text
         self.donut_canvas.create_text(
             width / 2, height / 2 - 8,
-            text="75%",
+            text=f"{pct}%",
             fill=COLOR_BOOTSTRAP_TEXT_DARK,
             font=(FONT_FAMILY, 14, "bold"),
             anchor="center"
