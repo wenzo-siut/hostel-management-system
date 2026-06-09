@@ -161,6 +161,7 @@ Rooms (1) ──── (Many) Residents
 ### Front-End & Database Developer
 
 **Aminov Shaxboz**
+GitHub: https://github.com/aminv-kod
 
 Responsibilities:
 
@@ -172,6 +173,7 @@ Responsibilities:
 ### Back-End & Database Developer
 
 **Orzuyev Shoxruxjon**
+GitHub: https://github.com/wenzo-siut
 
 Responsibilities:
 
